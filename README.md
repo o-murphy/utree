@@ -1,4 +1,4 @@
-# tree
+# tree-py
 ####  Pure-Python Implementation of `tree` commandline utility
 
 
