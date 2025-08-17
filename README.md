@@ -1,4 +1,4 @@
-# tree-py
+# utree
 ####  Pure-Python Implementation of `tree` commandline utility
 
 
@@ -11,7 +11,18 @@ uv tool install tree
 
 ## Usage
 ```Bash
-sting options -------:
+usage: tree.py [-a] [-d] [-l] [-f] [-x] [-L level] [-R] [-P pattern]
+               [-I pattern] [--ignore-case] [--matchdirs] [--noreport]
+               [--charset X] [--filelimit #] [--timefmt <f>] [-o filename]
+               [-q] [-N] [-Q] [-p] [-u] [-g] [-s] [-h] [--si] [-D] [-F]
+               [--inodes] [--device] [-v] [-t] [-c] [-U] [-r] [--dirsfirst]
+               [--sort X] [-i] [-A] [-S] [-n] [-C] [--version] [--help] [--]
+               [<directory list> ...]
+
+positional arguments:
+  <directory list>
+
+  ------- Listing options -------:
   -a                All files are listed.
   -d                List directories only.
   -l                Follow symbolic links like directories.
@@ -24,7 +35,8 @@ sting options -------:
   --ignore-case     Ignore case when pattern matching.
   --matchdirs       Include directory names in -P pattern matching.
   --noreport        Turn off file/directory count at end of tree listing.
-  --charset X       Use charset X for terminal/HTML and indentation line output.
+  --charset X       Use charset X for terminal/HTML and indentation line
+                    output.
   --filelimit #     Do not descend dirs with more than # files in them.
   --timefmt <f>     Print and format time according to the format <f>.
   -o filename       Output to file instead of stdout.
