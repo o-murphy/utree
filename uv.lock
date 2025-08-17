@@ -29,7 +29,7 @@ wheels = [
 ]
 
 [[package]]
-name = "tree"
+name = "utree"
 source = { editable = "." }
 
 [package.dev-dependencies]
