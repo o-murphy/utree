@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tree"
+description = "Pure-Python Implementation of tree commandline utility"
+authors = [
+    { name = "Dmytro Yaroshenko", email = "thehelixpg@gmail.com" }
+]
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+keywords = ["python", "tree", "commandline"]
+classifiers = [
+    "Intended Audience :: Developers",
+    "Natural Language :: English",
+    "Programming Language :: Python",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
+dynamic = ["version"]
+
+[project.urls]
+"Homepage" = "https://github.com/hbmartin/tree"
+"Bug Reports" = "https://github.com/hbmartin/tree/issues"
+"Source" = "https://github.com/hbmartin/tree"
+
+[project.scripts]
+tree = "tree.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = [
+    "tree*",
+]
+
+[tool.setuptools.dynamic]
+version = {attr = "tree.__version__"}
+
+[dependency-groups]
+dev = [
+    "ruff>=0.12.8",
+]
+
+[tool.ruff]
+include = [
+    "pyproject.toml",
+    "src/**/*.py",
+]
