@@ -3,7 +3,7 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tree-py"
+name = "utree"
 description = "Pure-Python Implementation of tree commandline utility"
 authors = [
     { name = "Dmytro Yaroshenko", email = "thehelixpg@gmail.com" }
