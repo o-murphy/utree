@@ -2,7 +2,7 @@ import re
 from argparse import Namespace
 from datetime import datetime
 from pathlib import Path
-from typing import TypedDict, Literal, Any, Union, List, Optional, cast
+from typing import TypedDict, Literal, Any, Union, List, Optional, cast, Tuple, Sequence
 
 from tree.tree_exc import *
 from tree.tree_format import (
@@ -10,19 +10,30 @@ from tree.tree_format import (
     _escape_non_printable,
     _get_quotes,
     _colorize,
-    _get_owner_and_group,
     _get_suffix,
     perms_to_str
 )
 from tree.tree_parser import parser
 
 
+class ErrorContent(TypedDict):
+    error: Union[Exception, str]
+
+
 class TreeNode(TypedDict, total=True):
-    type: Literal['link', 'directory', 'file']
+    type: Literal['link', 'directory', 'file', 'report']
+
+
+class TreeReport(TreeNode, total=False):
+    directories: int
+    files: int
+
+
+class TreePathNode(TreeNode, total=True):
     path: Path
 
 
-class FileNode(TreeNode, total=False):
+class FileNode(TreePathNode, total=False):
     inode: Union[str, int, None]
     dev: Union[str, int, None]
     mode: Union[int, None]
@@ -31,17 +42,14 @@ class FileNode(TreeNode, total=False):
     group: Union[str, int, None]
     size: Optional[int]
     time: Optional[datetime]
+    contents: List[Union[ErrorContent, TreeNode]]
 
 
 class DirNode(FileNode, total=False):
-    contents: List[TreeNode]
+    pass
 
 
-class ErrorContent(TypedDict):
-    error: Union[Exception, str]
-
-
-class LinkNode(TreeNode, total=False):
+class LinkNode(TreePathNode, total=False):
     contents: List[Union[Any, ErrorContent]]
 
 
@@ -82,15 +90,14 @@ def check_pattern(name: str, pattern: str, ignore_case=False):
     return re.search(pattern, name, flags=flags) is not None
 
 
-def filter_item(item: TreeNode, ns: Namespace) -> bool:
+def filter_item(item: TreePathNode, ns: Namespace) -> bool:
     """Check if node should be displayed"""
 
-    if not ns.a and item['path'].name.startswith("."):
+    name = item['path'].name
+    if not ns.a and name not in {'.', '..'} and name.startswith("."):
         return False
     if not ns.P and not ns.I:
         return True
-
-    name = item['path'].name
 
     should_match_pattern = (
             item['type'] == "directory" and ns.matchdirs or item['type'] != "directory"
@@ -106,7 +113,7 @@ def filter_item(item: TreeNode, ns: Namespace) -> bool:
     return True
 
 
-def filter_tree(tree_list: Tree, ns: Namespace) -> Tree:
+def filter_tree(tree_list: List[TreePathNode], ns: Namespace) -> Tree:
     """Filter tree on post processing"""
     filtered_list = []
     for item in tree_list:
@@ -115,7 +122,7 @@ def filter_tree(tree_list: Tree, ns: Namespace) -> Tree:
     return filtered_list
 
 
-def sort_tree(tree_list: Tree, ns: Namespace) -> Tree:
+def sort_tree(tree_list: List[TreeNode], ns: Namespace) -> Tree:
     """
     Sorts a dictionary representing a file tree based on user-defined options.
     """
@@ -123,46 +130,55 @@ def sort_tree(tree_list: Tree, ns: Namespace) -> Tree:
     if ns.sort and ns.sort not in TreeSortTypeError.possible_values:
         raise TreeSortTypeError
 
-    # No sorting if '-U' is present or if sorting by a specific key that's not 'name'
-    if ns.U or (ns.sort and ns.sort.lower() == "name"):
-        # The default sorted() behavior is by name, so no custom key is needed here
-        sorted_items = sorted(tree_list, key=lambda x: x['path'].name.lower())
+    if ns.U:
+        sorted_items = tree_list.copy()
 
-    # Sort by version if '-v' is specified
-    elif ns.v or (ns.sort and ns.sort.lower() == "version"):
-        # A simple version sort can be achieved by splitting and comparing parts
-        def version_key(item):
-            name = item['path'].name.lower()
-            return [int(c) if c.isdigit() else c for c in re.split("([0-9]+)", name)]
-
-        sorted_items = sorted(tree_list, key=version_key)
-
-    # Sort by modification time if '-t' is specified
-    elif ns.t or (ns.sort and ns.sort.lower() == "mtime"):
-        sorted_items = sorted(tree_list, key=lambda x: x['path'].stat().st_mtime, reverse=True)
-
-    # Sort by status change time if '-c' is specified
-    elif ns.c or (ns.sort and ns.sort.lower() == "ctime"):
-        sorted_items = sorted(tree_list, key=lambda x: x['path'].stat().st_ctime, reverse=True)
-
-    # Sort by size if '--sort size' is specified
-    elif ns.sort and ns.sort.lower() == "size":
-        sorted_items = sorted(tree_list, key=lambda x: x['path'].stat().st_size)
-
-    # The default sort is by name if no other option is specified
     else:
-        sorted_items = sorted(tree_list, key=lambda x: x['path'].name.lower())
 
-    # Reverse the sort order if '-r' is specified
-    if ns.r:
-        sorted_items = sorted_items[::-1]
+        # No sorting if '-U' is present or if sorting by a specific key that's not 'name'
+        if ns.sort and ns.sort.lower() == "name":
+            # The default sorted() behavior is by name, so no custom key is needed here
+            sorted_items = sorted(tree_list, key=lambda x: x['path'].name.lower())
 
-    # Handle the '--dirsfirst' option, but only if '-U' is not present
-    if ns.dirsfirst and not ns.U:
-        # Separate directories and files
-        dirs = [item for item in sorted_items if item['path'].is_dir()]
-        files = [item for item in sorted_items if not item['path'].is_dir()]
-        sorted_items = dirs + files
+        # Sort by version if '-v' is specified
+        elif ns.v or (ns.sort and ns.sort.lower() == "version"):
+            # A simple version sort can be achieved by splitting and comparing parts
+            def version_key(item):
+                name = item['path'].name.lower()
+                return [int(c) if c.isdigit() else c for c in re.split("([0-9]+)", name)]
+
+            sorted_items = sorted(tree_list, key=version_key)
+
+        # Sort by modification time if '-t' is specified
+        elif ns.t or (ns.sort and ns.sort.lower() == "mtime"):
+            sorted_items = sorted(tree_list, key=lambda x: x['path'].stat().st_mtime, reverse=True)
+
+        # Sort by status change time if '-c' is specified
+        elif ns.c or (ns.sort and ns.sort.lower() == "ctime"):
+            sorted_items = sorted(tree_list, key=lambda x: x['path'].stat().st_ctime, reverse=True)
+
+        # Sort by size if '--sort size' is specified
+        elif ns.sort and ns.sort.lower() == "size":
+            sorted_items = sorted(tree_list, key=lambda x: x['path'].stat().st_size)
+
+        # The default sort is by name if no other option is specified
+        else:
+            sorted_items = sorted(tree_list, key=lambda x: x['path'].name.lower())
+
+        # Reverse the sort order if '-r' is specified
+        if ns.r:
+            sorted_items = sorted_items[::-1]
+
+        # Handle the '--dirsfirst' option, but only if '-U' is not present
+        if ns.dirsfirst and not ns.U:
+            def dirsfirst_key(item):
+                type_order = {
+                    "directory": 0,
+                    "file": 1,
+                }
+                return type_order.get(item['type'], 2)
+
+            sorted_items = sorted(sorted_items, key=dirsfirst_key)
 
     return sorted_items
 
@@ -180,6 +196,28 @@ def get_datetime(path: Path, ns: Namespace) -> Optional[datetime]:
     return None
 
 
+def get_owner_and_group(path: Path, ns: Namespace) -> Tuple[Union[int, str, None], Union[int, str, None]]:
+    owner = None
+    group = None
+    if ns.u or ns.g:
+        try:
+            import pwd
+            import grp
+
+            st = path.stat()
+            if ns.u:
+                owner = getattr(pwd, "getpwuid")(st.st_uid).pw_name
+            if ns.g:
+                group = grp.getgrgid(st.st_gid).gr_name
+        except (ImportError, AttributeError):
+            st = path.stat()
+            if ns.u:
+                owner = st.st_uid
+            if ns.g:
+                group = st.st_gid
+    return owner, group
+
+
 def fill_stat(node: Union[FileNode, LinkNode], ns: Namespace) -> Union[FileNode, LinkNode]:
     if not node['type'] in {"file", "directory"}:
         return node
@@ -188,7 +226,7 @@ def fill_stat(node: Union[FileNode, LinkNode], ns: Namespace) -> Union[FileNode,
     try:
         st = path.stat()
         perms = st.st_mode if ns.p else None
-        owner, group = _get_owner_and_group(path, ns)
+        owner, group = get_owner_and_group(path, ns)
         return {
             **node,
             'inode': st.st_ino if ns.inodes else None,
@@ -203,7 +241,7 @@ def fill_stat(node: Union[FileNode, LinkNode], ns: Namespace) -> Union[FileNode,
     except OSError as err:
         errors = errs_dict(path)
         errors['contents'].append(err_dict(
-            TreePermissionError(str(err))
+            TreePermissionError(err)
         ))
         return errors
 
@@ -251,68 +289,73 @@ def fmt_name(node: FileNode, ns: Namespace) -> str:
     return name
 
 
-def tree_dir(path: Path, ns: Namespace, level: int = 0) -> Union[Tree, TreeNode]:
-    """Get directory tree"""
-    tree_list = []
+def tree_dir(path: Path, ns: Namespace, level: int = 0) -> List[TreeNode]:
+    """Get directory or file tree (always returns list with root node)"""
+
+    if path.is_file():
+        node = file_dict(path)
+        if not filter_item(node, ns):
+            return []
+        node = fill_stat(node, ns)
+        return [node]
+
+    dir_node = dir_dict(path)
+    if not filter_item(dir_node, ns):
+        return []
+
+    dir_node = cast(DirNode, fill_stat(dir_node, ns))
+
     if ns.L and level >= int(ns.L):
-        return tree_list
+        return [dir_node]
+
     try:
         subpaths = sorted(path.iterdir())
     except OSError as err:
         errors = errs_dict(path)
-        errors["contents"].append(err_dict(
-            TreePermissionError(err)
-        ))
-        return errors
+        errors["contents"].append(err_dict(TreePermissionError(err)))
+        dir_node["contents"] = [errors]
+        return [dir_node]
 
     if ns.filelimit and len(subpaths) > int(ns.filelimit):
         errors = errs_dict(path)
-        errors["contents"].append(err_dict(
-            TreeFileLimitError(len(subpaths))
-        ))
-        return errors
+        errors["contents"].append(err_dict(TreeFileLimitError(len(subpaths))))
+        dir_node["contents"] = [errors]
+        return [dir_node]
 
+    contents = []
     for sub_path in subpaths:
+        contents.extend(tree_dir(sub_path, ns, level + 1))
 
-        if sub_path.is_dir():
-            sub_node = dir_dict(sub_path)
-            if not filter_item(sub_node, ns):
-                continue
-            sub_node = cast(DirNode, fill_stat(sub_node, ns))
-            sub_node['contents'] = tree_dir(
-                sub_path, ns, level + 1
+    dir_node["contents"] = sort_tree(contents, ns)
+    return [dir_node]
+
+
+def tree(paths: Sequence[Path], ns: Namespace) -> Tree:
+    total_dirs, total_files = 0, 0
+    tree_list = []
+    if len(paths) == 1:
+        tree_list = tree_dir(paths[0], ns)
+    else:
+        for path in paths:
+            print(path)
+            tree_list.append(
+                tree_dir(path, ns)
             )
-        else:
-            sub_node = file_dict(sub_path)
-            if not filter_item(sub_node, ns):
-                continue
-            sub_node = fill_stat(sub_node, ns)
-        tree_list.append(sub_node)
-    tree_list = sort_tree(tree_list, ns)
+    if not ns.noreport:
+        report: TreeReport = {
+            'type': "report",
+            'directories': total_dirs,
+            'files': total_files,
+        }
+        tree_list.append(report)
     return tree_list
 
 
-def tree(ns, paths: List[Path]):
-    total_dirs, total_files = 0, 0
-    for i, path_str in enumerate(paths):
-        path = Path(path_str)
-        if path.is_dir():
-            tree_dict = tree_dir(path, ns)
-            dirs, files = print_tree(tree_dict, ns, path_root=path)
-            total_dirs += dirs
-            total_files += files
-        else:
-            print(f"{path_str} [error opening dir]", file=ns.o)
-            total_files += 1
-        if i < len(paths) - 1:
-            print(file=ns.o)
-    if not ns.noreport:
-        print(f"\n{total_dirs} directories, {total_files} files", file=ns.o)
-
-
-ns = parser.parse_args(['.', '-L', '2',
+paths_ = ['..']
+ns = parser.parse_args([*paths_, '-L', '2',
                         '-s', '-D',
                         # "-P", ".*\.txt", "--matchdirs"
                         ])
-r = tree_dir(Path('.'), ns)
-print(r)
+r = tree([Path(p) for p in paths_], ns)
+from pprint import pprint
+pprint(r, sort_dicts=False)
