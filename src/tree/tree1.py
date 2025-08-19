@@ -1,3 +1,4 @@
+import os
 import re
 from argparse import Namespace
 from datetime import datetime
@@ -6,11 +7,7 @@ from typing import TypedDict, Literal, Any, Union, List, Optional, cast, Tuple, 
 
 from tree.tree_exc import *
 from tree.tree_format import (
-    _get_fullname_str,
-    _escape_non_printable,
-    _get_quotes,
     _colorize,
-    _get_suffix,
     perms_to_str
 )
 from tree.tree_parser import parser
@@ -279,18 +276,48 @@ def fmt_time(node: FileNode, ns: Namespace) -> str:
     return ""
 
 
+def get_fullname_str(path: Path, is_full: bool = False) -> str:
+    return path.as_posix() if is_full else path.name
+
+
+def replace_non_printable(path_name: str, ns: Namespace) -> str:
+    if ns.q:
+        path_name = "".join(c if c.isprintable() else "?" for c in path_name)
+    elif not ns.N:
+        path_name = "".join(c if c.isprintable() else "" for c in path_name)
+    return path_name
+
+
+def get_quotes(path_name: str) -> str:
+    return f'"{path_name}"'
+
+
+def get_suffix(path: Path) -> str:
+    suffix = ""
+    if path.is_dir():
+        suffix = "/"
+    elif path.is_symlink():
+        suffix = "@"
+    elif os.access(path, os.X_OK) and not path.is_dir():
+        suffix = "*"
+    # add on need '=', '|', '>'
+    return suffix
+
+
 def fmt_name(node: FileNode, ns: Namespace) -> str:
     path = node['path']
-    path_name = _get_fullname_str(path, ns)
-    path_name = _escape_non_printable(path_name, ns)
-    path_name = _get_quotes(path_name, ns)
-    suffix = _get_suffix(path, ns)
-    name = _colorize(path, path_name + suffix, ns)
+    path_name = get_fullname_str(path, ns.f)
+    path_name = replace_non_printable(path_name, ns)
+    if ns.Q:
+        path_name = get_quotes(path_name)
+    if ns.F:
+        path_name += get_suffix(path)
+    name = _colorize(path, path_name, ns)
     return name
 
 
-def tree_dir(path: Path, ns: Namespace, level: int = 0) -> Tree:
-    """returns Tree for one path dir/file"""
+def tree_dir(path: Path, ns: Namespace, level: int = 0, rerun: bool = False) -> Tree:
+    """Returns Tree for one path dir/file with local -R support."""
 
     if path.is_file():
         node = file_dict(path)
@@ -303,9 +330,6 @@ def tree_dir(path: Path, ns: Namespace, level: int = 0) -> Tree:
         return []
 
     dir_node = cast(DirNode, fill_stat(dir_node, ns))
-
-    if ns.L and level >= int(ns.L):
-        return dir_node
 
     try:
         subpaths = sorted(path.iterdir())
@@ -321,21 +345,37 @@ def tree_dir(path: Path, ns: Namespace, level: int = 0) -> Tree:
         return dir_node
 
     contents: List[TreeNode] = []
+
     for sub_path in subpaths:
-        child = tree_dir(sub_path, ns, level + 1)
-        if isinstance(child, list):
-            contents.extend(child)
-        elif child:
-            contents.append(child)
+        if ns.L and not rerun and level >= int(ns.L):
+            node = tree_dir(sub_path, ns, level, rerun=True)
+            contents.append(node)
+        else:
+            child = tree_dir(sub_path, ns, level + 1, rerun=rerun)
+            if isinstance(child, list):
+                contents.extend(child)
+            elif child:
+                contents.append(child)
 
     dir_node["contents"] = sort_tree(contents, ns)
+
+    if ns.R and not rerun and ns.L and level >= int(ns.L):
+        rerun_contents: List[TreeNode] = []
+        for sub_path in subpaths:
+            child = tree_dir(sub_path, ns, level + 1, rerun=True)
+            if isinstance(child, list):
+                rerun_contents.extend(child)
+            elif child:
+                rerun_contents.append(child)
+        dir_node["contents"].extend(sort_tree(rerun_contents, ns))
+
     return dir_node
 
 
 def count_nodes(node: TreeNode) -> Tuple[int, int]:
     """Return (dirs, files) count for one node (recursively)."""
     if node["type"] == "file":
-        return (0, 1)
+        return 0, 1
     elif node["type"] == "directory":
         dirs, files = 1, 0
         for child in node.get("contents", []):
@@ -350,6 +390,7 @@ def count_nodes(node: TreeNode) -> Tuple[int, int]:
 
 def tree(paths: Sequence[Path], ns: Namespace) -> List[TreeNode]:
     nodes: List[TreeNode] = []
+
     for path in paths:
         node = tree_dir(path, ns)
         if isinstance(node, list):
@@ -374,12 +415,13 @@ def tree(paths: Sequence[Path], ns: Namespace) -> List[TreeNode]:
     return nodes
 
 
-paths_ = ['..', ]
-ns_ = parser.parse_args([*paths_, '-L', '3',
-                        '-s', '-D',
-                        # "-P", ".*\.txt", "--matchdirs"
-                        # "--filelimit", "2",
-                        ])
+paths_ = ['../..', ]
+ns_ = parser.parse_args([*paths_, '-L', '2', '-R',
+                         '-s', '-D',
+                         # "-P", ".*\.txt", "--matchdirs"
+                         # "--filelimit", "2",
+                         ])
 r = tree([Path(p) for p in paths_], ns_)
 from pprint import pprint
+
 pprint(r, sort_dicts=False)
