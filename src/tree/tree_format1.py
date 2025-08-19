@@ -3,7 +3,9 @@ import os
 import stat
 from argparse import Namespace
 from pathlib import Path
+from typing import Any
 
+from tree.tree_types import LinkNode
 from tree_types import FileNode
 
 
@@ -108,8 +110,9 @@ def fmt_time(node: FileNode, ns: Namespace) -> str:
 
 
 def get_fullname_str(path: Path, is_full: bool = False) -> str:
-    return path.as_posix() if is_full else path.name
-
+    if is_full:
+        return path.as_posix()
+    return path.name or "."
 
 def replace_non_printable(path_name: str, ns: Namespace) -> str:
     if ns.q:
@@ -201,3 +204,10 @@ def fmt_name(node: FileNode, ns: Namespace) -> str:
         name += get_suffix(path)
     name = colorize(path, name, ns)
     return name
+
+
+def fmt_error(content: LinkNode, ns: Namespace) -> str:
+    # if coloured
+    if ns.C:
+        return f"{RED}{str(content.get('error', 'unknown error'))}{RESET}"
+    return f"{content}"

@@ -13,16 +13,16 @@ class TreeNode(TypedDict, total=True):
     type: NodeType
 
 
-class TreeReport(TreeNode, total=False):
+class ReportNode(TreeNode, total=False):
     directories: int
     files: int
 
 
-class TreePathNode(TreeNode, total=True):
+class PathNode(TreeNode, total=True):
     path: Path
 
 
-class FileNode(TreePathNode, total=False):
+class FileNode(PathNode, total=False):
     inode: Union[str, int, None]
     dev: Union[str, int, None]
     mode: Union[int, None]
@@ -38,7 +38,7 @@ class DirNode(FileNode, total=False):
     pass
 
 
-class LinkNode(TreePathNode, total=False):
+class LinkNode(PathNode, total=False):
     contents: List[Union[Any, ErrorContent]]
 
 
