@@ -53,7 +53,7 @@ class LinkNode(TreePathNode, total=False):
     contents: List[Union[Any, ErrorContent]]
 
 
-Tree = List[TreeNode]
+Tree = Union[TreeNode, List[TreeNode]]
 
 
 def file_dict(path: Path) -> FileNode:
@@ -289,15 +289,14 @@ def fmt_name(node: FileNode, ns: Namespace) -> str:
     return name
 
 
-def tree_dir(path: Path, ns: Namespace, level: int = 0) -> List[TreeNode]:
-    """Get directory or file tree (always returns list with root node)"""
+def tree_dir(path: Path, ns: Namespace, level: int = 0) -> Tree:
+    """returns Tree for one path dir/file"""
 
     if path.is_file():
         node = file_dict(path)
         if not filter_item(node, ns):
             return []
-        node = fill_stat(node, ns)
-        return [node]
+        return fill_stat(node, ns)
 
     dir_node = dir_dict(path)
     if not filter_item(dir_node, ns):
@@ -306,7 +305,7 @@ def tree_dir(path: Path, ns: Namespace, level: int = 0) -> List[TreeNode]:
     dir_node = cast(DirNode, fill_stat(dir_node, ns))
 
     if ns.L and level >= int(ns.L):
-        return [dir_node]
+        return dir_node
 
     try:
         subpaths = sorted(path.iterdir())
@@ -314,48 +313,51 @@ def tree_dir(path: Path, ns: Namespace, level: int = 0) -> List[TreeNode]:
         errors = errs_dict(path)
         errors["contents"].append(err_dict(TreePermissionError(err)))
         dir_node["contents"] = [errors]
-        return [dir_node]
+        return dir_node
 
     if ns.filelimit and len(subpaths) > int(ns.filelimit):
-        errors = errs_dict(path)
-        errors["contents"].append(err_dict(TreeFileLimitError(len(subpaths))))
-        dir_node["contents"] = [errors]
-        return [dir_node]
+        err = err_dict(TreeFileLimitError(len(subpaths)))
+        dir_node["contents"] = [err]
+        return dir_node
 
-    contents = []
+    contents: List[TreeNode] = []
     for sub_path in subpaths:
-        contents.extend(tree_dir(sub_path, ns, level + 1))
+        child = tree_dir(sub_path, ns, level + 1)
+        if isinstance(child, list):
+            contents.extend(child)
+        elif child:
+            contents.append(child)
 
     dir_node["contents"] = sort_tree(contents, ns)
-    return [dir_node]
+    return dir_node
 
 
-def tree(paths: Sequence[Path], ns: Namespace) -> Tree:
-    total_dirs, total_files = 0, 0
-    tree_list = []
-    if len(paths) == 1:
-        tree_list = tree_dir(paths[0], ns)
-    else:
-        for path in paths:
-            print(path)
-            tree_list.append(
-                tree_dir(path, ns)
-            )
+def tree(paths: Sequence[Path], ns: Namespace) -> List[TreeNode]:
+    nodes: List[TreeNode] = []
+    for path in paths:
+        node = tree_dir(path, ns)
+        if isinstance(node, list):
+            nodes.extend(node)
+        elif node:
+            nodes.append(node)
+
     if not ns.noreport:
         report: TreeReport = {
-            'type': "report",
-            'directories': total_dirs,
-            'files': total_files,
+            "type": "report",
+            "directories": 0,
+            "files": 0,
         }
-        tree_list.append(report)
-    return tree_list
+        nodes.append(report)
+
+    return nodes
 
 
-paths_ = ['..']
-ns = parser.parse_args([*paths_, '-L', '2',
+paths_ = ['.', ]
+ns_ = parser.parse_args([*paths_, '-L', '2',
                         '-s', '-D',
                         # "-P", ".*\.txt", "--matchdirs"
+                        # "--filelimit", "2",
                         ])
-r = tree([Path(p) for p in paths_], ns)
+r = tree([Path(p) for p in paths_], ns_)
 from pprint import pprint
 pprint(r, sort_dicts=False)
