@@ -294,13 +294,22 @@ def get_quotes(path_name: str) -> str:
 
 def get_suffix(path: Path) -> str:
     suffix = ""
-    if path.is_dir():
-        suffix = "/"
-    elif path.is_symlink():
-        suffix = "@"
-    elif os.access(path, os.X_OK) and not path.is_dir():
-        suffix = "*"
-    # add on need '=', '|', '>'
+    try:
+        if path.is_dir():
+            suffix = "/"
+        elif path.is_symlink():
+            suffix = "@"
+        elif os.access(path, os.X_OK) and not path.is_dir():
+            suffix = "*"
+        elif path.is_fifo():
+            suffix = "|"
+        elif path.is_socket():
+            suffix = "="
+        elif path.is_file() and path.suffix.lower() in {".bat", ".cmd"}:  # Windows-style executables
+            suffix = ">"
+    except OSError:
+        # На випадок помилок доступу, залишаємо порожній суфікс
+        suffix = ""
     return suffix
 
 
