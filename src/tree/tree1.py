@@ -308,20 +308,19 @@ def get_suffix(path: Path) -> str:
         elif path.is_file() and path.suffix.lower() in {".bat", ".cmd"}:  # Windows-style executables
             suffix = ">"
     except OSError:
-        # На випадок помилок доступу, залишаємо порожній суфікс
         suffix = ""
     return suffix
 
 
 def fmt_name(node: FileNode, ns: Namespace) -> str:
     path = node['path']
-    path_name = get_fullname_str(path, ns.f)
-    path_name = replace_non_printable(path_name, ns)
+    name = get_fullname_str(path, ns.f)
+    name = replace_non_printable(name, ns)
     if ns.Q:
-        path_name = get_quotes(path_name)
+        name = get_quotes(name)
     if ns.F:
-        path_name += get_suffix(path)
-    name = _colorize(path, path_name, ns)
+        name += get_suffix(path)
+    name = _colorize(path, name, ns)
     return name
 
 
