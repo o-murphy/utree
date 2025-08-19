@@ -36,7 +36,7 @@ BOLD_RED = BOLD + RED
 BOLD_MAGENTA = BOLD + MAGENTA
 
 
-def _perms_to_str(st_mode):
+def perms_to_str(st_mode):
     file_type = "-"
     if stat.S_ISDIR(st_mode):
         file_type = "d"
@@ -187,7 +187,7 @@ def _colorize(path: Path, path_name: str, ns: argparse.Namespace) -> str:
 def _get_perms_str(path: Path, ns: argparse.Namespace) -> str:
     if ns.p:
         # perms = oct(path.stat().st_mode & 0o777)
-        return _perms_to_str(path.stat().st_mode)
+        return perms_to_str(path.stat().st_mode)
     return ""
 
 
