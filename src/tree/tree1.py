@@ -332,6 +332,22 @@ def tree_dir(path: Path, ns: Namespace, level: int = 0) -> Tree:
     return dir_node
 
 
+def count_nodes(node: TreeNode) -> Tuple[int, int]:
+    """Return (dirs, files) count for one node (recursively)."""
+    if node["type"] == "file":
+        return (0, 1)
+    elif node["type"] == "directory":
+        dirs, files = 1, 0
+        for child in node.get("contents", []):
+            if "type" in child:  # TreeNode
+                d, f = count_nodes(child)
+                dirs += d
+                files += f
+        return dirs, files
+    else:
+        return 0, 0
+
+
 def tree(paths: Sequence[Path], ns: Namespace) -> List[TreeNode]:
     nodes: List[TreeNode] = []
     for path in paths:
@@ -342,18 +358,24 @@ def tree(paths: Sequence[Path], ns: Namespace) -> List[TreeNode]:
             nodes.append(node)
 
     if not ns.noreport:
+        total_dirs, total_files = 0, 0
+        for node in nodes:
+            d, f = count_nodes(node)
+            total_dirs += d
+            total_files += f
+
         report: TreeReport = {
             "type": "report",
-            "directories": 0,
-            "files": 0,
+            "directories": total_dirs,
+            "files": total_files,
         }
         nodes.append(report)
 
     return nodes
 
 
-paths_ = ['.', ]
-ns_ = parser.parse_args([*paths_, '-L', '2',
+paths_ = ['..', ]
+ns_ = parser.parse_args([*paths_, '-L', '3',
                         '-s', '-D',
                         # "-P", ".*\.txt", "--matchdirs"
                         # "--filelimit", "2",
