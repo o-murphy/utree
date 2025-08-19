@@ -1,56 +1,19 @@
-import os
 import re
 from argparse import Namespace
 from datetime import datetime
 from pathlib import Path
-from typing import TypedDict, Literal, Any, Union, List, Optional, cast, Tuple, Sequence
+from typing import Union, List, Optional, cast, Tuple, Sequence
 
 from tree.tree_exc import *
-from tree.tree_format import (
-    _colorize,
-    perms_to_str
+from tree.tree_format1 import (
+    perms_to_str,
 )
 from tree.tree_parser import parser
-
-
-class ErrorContent(TypedDict):
-    error: Union[Exception, str]
-
-
-class TreeNode(TypedDict, total=True):
-    type: Literal['link', 'directory', 'file', 'report']
-
-
-class TreeReport(TreeNode, total=False):
-    directories: int
-    files: int
-
-
-class TreePathNode(TreeNode, total=True):
-    path: Path
-
-
-class FileNode(TreePathNode, total=False):
-    inode: Union[str, int, None]
-    dev: Union[str, int, None]
-    mode: Union[int, None]
-    prot: Union[str, None]
-    user: Union[str, int, None]
-    group: Union[str, int, None]
-    size: Optional[int]
-    time: Optional[datetime]
-    contents: List[Union[ErrorContent, TreeNode]]
-
-
-class DirNode(FileNode, total=False):
-    pass
-
-
-class LinkNode(TreePathNode, total=False):
-    contents: List[Union[Any, ErrorContent]]
-
-
-Tree = Union[TreeNode, List[TreeNode]]
+from tree.tree_types import (
+    TreeNode,
+    TreePathNode, TreeReport, LinkNode, DirNode,
+    FileNode, ErrorContent, Tree,
+)
 
 
 def file_dict(path: Path) -> FileNode:
@@ -241,87 +204,6 @@ def fill_stat(node: Union[FileNode, LinkNode], ns: Namespace) -> Union[FileNode,
             TreePermissionError(err)
         ))
         return errors
-
-
-def fmt_size(node: FileNode, ns: Namespace) -> str:
-    st_size = node.get('size', None)
-    if not st_size:
-        return str(st_size)
-    if ns.h:
-        for unit in ["B", "K", "M", "G", "T", "P", "E", "Z"]:
-            if st_size < 1024:
-                size_str = f"{st_size:.1f}{unit}"
-                break
-            st_size /= 1024
-        else:
-            size_str = f"{st_size:.1f}Y"
-    elif ns.si:
-        for unit in ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB"]:
-            if st_size < 1000:
-                size_str = f"{st_size:.1f}{unit}"
-                break
-            st_size /= 1000
-        else:
-            size_str = f"{st_size:.1f}YB"
-    else:
-        size_str = str(st_size)
-    return size_str
-
-
-def fmt_time(node: FileNode, ns: Namespace) -> str:
-    if ns.timefmt or ns.D:
-        ts = node.get('time', None)
-        if ts:
-            return ts.strftime(ns.timefmt or "%b %d %H:%M")
-    return ""
-
-
-def get_fullname_str(path: Path, is_full: bool = False) -> str:
-    return path.as_posix() if is_full else path.name
-
-
-def replace_non_printable(path_name: str, ns: Namespace) -> str:
-    if ns.q:
-        path_name = "".join(c if c.isprintable() else "?" for c in path_name)
-    elif not ns.N:
-        path_name = "".join(c if c.isprintable() else "" for c in path_name)
-    return path_name
-
-
-def get_quotes(path_name: str) -> str:
-    return f'"{path_name}"'
-
-
-def get_suffix(path: Path) -> str:
-    suffix = ""
-    try:
-        if path.is_dir():
-            suffix = "/"
-        elif path.is_symlink():
-            suffix = "@"
-        elif os.access(path, os.X_OK) and not path.is_dir():
-            suffix = "*"
-        elif path.is_fifo():
-            suffix = "|"
-        elif path.is_socket():
-            suffix = "="
-        elif path.is_file() and path.suffix.lower() in {".bat", ".cmd"}:  # Windows-style executables
-            suffix = ">"
-    except OSError:
-        suffix = ""
-    return suffix
-
-
-def fmt_name(node: FileNode, ns: Namespace) -> str:
-    path = node['path']
-    name = get_fullname_str(path, ns.f)
-    name = replace_non_printable(name, ns)
-    if ns.Q:
-        name = get_quotes(name)
-    if ns.F:
-        name += get_suffix(path)
-    name = _colorize(path, name, ns)
-    return name
 
 
 def tree_dir(path: Path, ns: Namespace, level: int = 0, rerun: bool = False) -> Tree:
