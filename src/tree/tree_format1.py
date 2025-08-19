@@ -3,7 +3,7 @@ import os
 import stat
 from argparse import Namespace
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from tree.tree_types import LinkNode
 from tree_types import FileNode
@@ -194,9 +194,23 @@ def colorize(path: Path, path_name: str, ns: Namespace) -> str:
     return path_name
 
 
-def fmt_name(node: FileNode, ns: Namespace) -> str:
+def fmt_name(node: FileNode, ns: Namespace, root_path: Optional[Path] = None, is_root: bool = False) -> str:
     path = node['path']
-    name = get_fullname_str(path, ns.f)
+    raw_path = str(path)
+
+    # Для кореня і спеціальних директорій
+    if is_root or raw_path in {".", ".."} or raw_path.startswith("../"):
+        name = raw_path
+    else:
+        # Відносно кореня, якщо -f не встановлено
+        if ns.f or not root_path:
+            name = path.as_posix()
+        else:
+            try:
+                name = path.relative_to(root_path).as_posix()
+            except ValueError:
+                name = path.as_posix()
+
     name = replace_non_printable(name, ns)
     if ns.Q:
         name = get_quotes(name)

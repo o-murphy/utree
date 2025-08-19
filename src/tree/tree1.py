@@ -234,7 +234,7 @@ def tree_dir(path: Path, ns: Namespace, level: int = 0, rerun: bool = False) -> 
         dir_node["contents"] = [err]
         return dir_node
 
-    contents: List[Union[TreeNode|FileNode]] = []
+    contents: List[Union[TreeNode | FileNode]] = []
 
     for sub_path in subpaths:
         if ns.L and not rerun and level + 1 >= int(ns.L):
@@ -306,44 +306,40 @@ def tree(paths: Sequence[Path], ns: Namespace) -> List[TreeNode]:
     return nodes
 
 
-def print_node(node: TreeNode, ns: Namespace, prefix: str = "", is_last: bool = True, is_root: bool = False):
+def print_node(node: TreeNode, ns: Namespace, prefix: str = "", is_last: bool = True,
+               is_root: bool = False, root_path: Optional[Path] = None):
     charset = CHARSETS.get(ns.charset, CHARSETS["utf-8"])
+    no_indent = getattr(ns, 'i', False)
 
-    no_indent = getattr(ns, 'i', False)  # True, якщо '-i' активний
-
-    # ---- errors ----
     if "error" in node:
         error_str = fmt_error(cast(LinkNode, node), ns)
         connector = "" if is_root or no_indent else (charset['last'] if is_last else charset['branch'])
         print(f"{prefix}{connector}{error_str}", file=ns.o)
         return
 
-    # ---- normal path ----
-    name = fmt_name(cast(FileNode, node), ns) if "path" in node else ""
+    name = fmt_name(cast(FileNode, node), ns, root_path=root_path, is_root=is_root) if "path" in node else ""
     connector = "" if is_root or no_indent else (charset['last'] if is_last else charset['branch'])
     print(f"{prefix}{connector}{name}", file=ns.o)
 
-    # ---- recurse into directory ----
     if node.get("type") == "directory":
         contents = cast(DirNode, node).get("contents", [])
         for i, child in enumerate(contents):
             last = i == len(contents) - 1
-            child_prefix = "" if is_root or no_indent else prefix + (charset['space'] if is_last else charset['vertical'])
-            print_node(child, ns, child_prefix, last, is_root=False)
+            child_prefix = "" if is_root or no_indent else prefix + (
+                charset['space'] if is_last else charset['vertical'])
+            print_node(child, ns, child_prefix, last, is_root=False, root_path=root_path or node['path'])
 
 
 def print_tree(tree: List[TreeNode], ns: Namespace):
     for node in tree:
         if node.get("type") != "report":
-            print_node(node, ns, prefix="", is_last=True, is_root=True)
+            print_node(node, ns, prefix="", is_last=True, is_root=True, root_path=node.get('path'))
 
-    # --- print reports ---
     if not ns.noreport:
         for node in tree:
             if node.get("type") == "report":
                 report_node = cast(ReportNode, node)
                 print(f"\n{report_node['directories']} directories, {report_node['files']} files", file=ns.o)
-
 
 
 paths_ = ['..', '.', '../..']
@@ -353,10 +349,11 @@ ns_ = parser.parse_args([*paths_,
                          '-C',
                          '-n',
                          '-s', '-D',
-                         # '-i', '-f',
+                         # '-i',
+                         '-f',
                          # "--charset", "ascii",
                          # "-P", ".*\.txt", "--matchdirs"
-                         # "--filelimit", "2",
+                         "--filelimit", "2",
                          ])
 r = tree([Path(p) for p in paths_], ns_)
 # print(type(r))
